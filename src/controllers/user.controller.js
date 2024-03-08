@@ -72,7 +72,7 @@ const verfyEmail =  catchError(async(req, res) => {
     const codeEmail = await EmailCode.findOne({ 
         where: { code : code}
     });
-    if(!codeEmail) return res.status(401).json({ message: "Wrong code"})
+    if(!codeEmail) return res.status(401).json({ message: "Wrong code"});
     const updateUser = await Users.update(
     { isVerified: true},
     { where: { id : codeEmail.userId}, returning: true}
@@ -109,11 +109,60 @@ const getLoggedUser = catchError(async(req, res) =>{
     return res.json(req.user)
 })
 
+const emailResetPass = catchError(async(req, res) => {
+    const { email, frontBaseUrl } = req.body;
+    const user = await Users.findOne({where: { email : email}});
+    if(!user){
+        return res.status(401).json({ message: "No se econtró el correo"})
+};
+
+const code =  require('crypto').randomBytes(32).toString('hex') ;
+const link = `${frontBaseUrl}/${code}`;
+
+await EmailCode.create({
+    code,
+    userId: user.id,
+})
+
+await sendEmail({
+    to: email, 
+    subject: "Recuperación de contraseña",
+    html: `<div style="text-align: center">
+    <img style="width: 6rem" src="https://asset.brandfetch.io/idtHcoNuSm/idR3MrOs7m.jpeg" </img>
+    <h1>Correo de Recuperación</h1>
+    <p>Te envio este correo para que puedas recuperar tu contraseña mediante el siguiente link:</p>
+    <p><a href=${link}> Verifica Aqui </a></p>
+    <p>${link}</p> 
+    </div>` // texto
+});
+return res.status(201).json(user)
+});
+
+
+const resetPass = catchError(async(req, res) => {
+    const { password } = req.body;
+    const encryptedPass = await bcrypt.hash(password, 10)
+    const { code } = req.params;
+    const codeEmail = await EmailCode.findOne({ 
+        where: { code : code}
+    });
+    if(!codeEmail) return res.status(401).json({ message: "Wrong code"});
+    const updateUser = await Users.update(
+        { password: encryptedPass},
+        { where: { id : codeEmail.userId}, returning: true}
+        );
+        await codeEmail.destroy()
+        return res.json(updateUser[1][0]);
+})
+
+
 Users.prototype.toJSON = function () {
     const values = Object.assign({}, this.get());
     delete values.password;
     return values;
 }
+
+
 
 module.exports = {
     getAll,
@@ -123,5 +172,7 @@ module.exports = {
     update,
     verfyEmail,
     login,
-    getLoggedUser
+    getLoggedUser,
+    emailResetPass,
+    resetPass
 }
